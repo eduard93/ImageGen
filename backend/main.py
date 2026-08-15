@@ -1,7 +1,8 @@
 """FastAPI application: REST API + serves the static frontend.
 
-Run with:  uv run uvicorn backend.main:app --reload
-Then open: http://127.0.0.1:8000
+Run with:  uv run python -m backend.main      (serves on port 8001)
+      or:  uv run uvicorn backend.main:app --reload --port 8001
+Then open: http://127.0.0.1:8001
 """
 from __future__ import annotations
 
@@ -30,6 +31,10 @@ from .schemas import (
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("genai")
+
+# Default port the app serves on. Change it here (and it applies to
+# `python -m backend.main`); the uvicorn CLI can override with --port.
+DEFAULT_PORT = 8001
 
 POLL_INTERVAL_SECONDS = 5
 POLL_TIMEOUT_SECONDS = 20 * 60  # give up on a batch job after 20 minutes
@@ -490,3 +495,14 @@ def delete_generation(gen_id: int) -> dict:
 # ---------------------------------------------------------------------------
 
 app.mount("/", StaticFiles(directory=config.FRONTEND_DIR, html=True), name="frontend")
+
+
+# ---------------------------------------------------------------------------
+# Entry point: `uv run python -m backend.main`
+# ---------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    import uvicorn
+
+    # Pass the import string (not `app`) so --reload / auto-reload works.
+    uvicorn.run("backend.main:app", host="127.0.0.1", port=DEFAULT_PORT, reload=True)

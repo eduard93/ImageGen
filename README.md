@@ -10,17 +10,26 @@ A simple, single-user, browser-based image-generation app.
 - **Image generation:** Google Gemini **Batch API** (one job per request; jobs
   run concurrently). A synchronous fallback is available via Settings.
 
+## Documentation
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** — the design: components, data model,
+  the generation flow, and the key decisions behind them.
+- **[CLAUDE.md](CLAUDE.md)** — working notes, conventions, and gotchas for
+  changing the code (read this before editing).
+
 ## Setup
 
 ```bash
 # 1. Install dependencies into a managed virtualenv
 uv sync
 
-# 2. Run the app
-uv run uvicorn backend.main:app --reload
+# 2. Run the app (serves on port 8001)
+uv run python -m backend.main
+#    or, equivalently:
+#    uv run uvicorn backend.main:app --reload --port 8001
 
 # 3. Open the UI
-#    http://127.0.0.1:8000
+#    http://127.0.0.1:8001
 ```
 
 Then open **Settings** in the app and paste your Gemini API key. (Alternatively,
@@ -55,6 +64,9 @@ frontend/
   app.js       all UI logic
   styles.css   all styling (colors are variables at the top)
 data/          created at runtime: app.db + images/  (git-ignored)
+
+ARCHITECTURE.md  design overview (components, data model, flow)
+CLAUDE.md        conventions + gotchas for editing the code
 ```
 
 ## Backups
