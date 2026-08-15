@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image Studio</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <!-- Our Alpine component (defines window.app) loads first, then Alpine. -->
+  <script defer src="/app.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body x-data="app()" x-init="init()">
+
+  <!-- ===================== Left sidebar: past generations ================= -->
+  <aside class="sidebar">
+    <button class="new-btn" @click="newGeneration()">+ New generation</button>
+    <div class="gen-list">
+      <template x-for="g in generations" :key="g.id">
+        <div class="gen-item" :class="{ active: current && current.id === g.id }"
+             @click="selectGeneration(g)">
+          <div class="gen-thumb">
+            <template x-if="g.images.length">
+              <img :src="g.images[0].url" alt="" />
+            </template>
+            <template x-if="!g.images.length">
+              <span class="status-dot" :class="g.status"></span>
+            </template>
+          </div>
+          <div class="gen-meta">
+            <div class="gen-prompt" x-text="g.name || g.prompt"
+                 :title="g.name || g.prompt"></div>
+            <div class="gen-status" x-text="g.status"></div>
+          </div>
+          <div class="gen-actions">
+            <button class="icon-btn" title="Rename"
+                    @click.stop="renameGeneration(g)">✎</button>
+            <button class="icon-btn" title="Delete"
+                    @click.stop="deleteGeneration(g)">&times;</button>
+          </div>
+        </div>
+      </template>
+      <div class="empty" x-show="!generations.length">No generations yet.</div>
+    </div>
+  </aside>
+
+  <!-- ===================== Main column ==================================== -->
+  <main class="main">
+    <header class="topbar">
+      <h1>Image Studio</h1>
+      <div class="spacer"></div>
+      <button class="ghost-btn" @click="toggleTheme()" title="Toggle light/dark">
+        <span x-text="settings.theme === 'light' ? '🌙' : '☀️'"></span></button>
+      <button class="ghost-btn" @click="openLibrary()">Image library</button>
+      <button class="ghost-btn" @click="openSettings()">Settings</button>
+    </header>
+
+    <!-- Chat transcript for the selected generation -->
+    <section class="chat" x-ref="chat">
+      <template x-if="!current">
+        <div class="empty big">Write a prompt below to generate an image.</div>
+      </template>
+
+      <template x-if="current">
+        <div>
+          <!-- User bubble -->
+          <div class="bubble user">
+            <div class="bubble-text" x-text="current.prompt"></div>
+            <div class="ref-row" x-show="current.reference_image_ids.length">
+              <template x-for="id in current.reference_image_ids" :key="id">
+                <img class="ref-thumb" :src="'/api/images/' + id + '/file'" alt="ref"
+                     @click="openLightbox('/api/images/' + id + '/file')" />
+              </template>
+            </div>
+            <div class="bubble-meta">
+              <span x-text="current.model"></span> ·
+              <span x-text="current.resolution"></span> ·
+              <span x-text="current.num_images + ' image(s)'"></span>
+            </div>
+          </div>
+
+          <!-- Assistant bubble -->
+          <div class="bubble assistant">
+            <template x-if="current.status === 'pending' || current.status === 'running'">
+              <div class="working"><span class="spinner"></span>
+                Generating… (<span x-text="current.status"></span>)</div>
+            </template>
+            <template x-if="current.status === 'failed'">
+              <div class="error-box" x-text="current.error || 'Generation failed.'"></div>
+            </template>
+            <template x-if="current.status === 'succeeded'">
+              <div class="img-grid">
+                <template x-for="img in current.images" :key="img.id">
+                  <figure class="result">
+                    <img :src="img.url" alt="result" @click="openLightbox(img.url)" />
+                    <button class="save-btn" @click="saveImage(img)"
+                            title="Save to disk">⭳ Save</button>
+                    <button class="save-btn secondary" @click="promptSaveToLibrary(img)">
+                      + Library</button>
+                  </figure>
+                </template>
+              </div>
+            </template>
+          </div>
+
+          <div class="edit-row" x-show="current.status !== 'pending'">
+            <button class="ghost-btn" @click="editFromCurrent()">
+              ✎ Edit this prompt as a new generation</button>
+          </div>
+        </div>
+      </template>
+    </section>
+
+    <!-- ===================== Composer ==================================== -->
+    <section class="composer" :class="{ dragging }"
+             @dragover.prevent="dragging = true"
+             @dragenter.prevent="dragging = true"
+             @dragleave.prevent="dragging = false"
+             @drop.prevent="onDrop($event)">
+      <div class="drop-overlay" x-show="dragging">Drop image(s) to attach</div>
+      <div class="ref-strip" x-show="composer.refs.length">
+        <template x-for="ref in composer.refs" :key="ref.key">
+          <div class="chip">
+            <img :src="ref.url" alt="" @click.stop="openLightbox(ref.url)" />
+            <span @click="insertMention(ref)" x-text="'@' + ref.label"></span>
+            <button class="chip-lib" x-show="!ref.inLibrary" title="Add to library"
+                    @click.stop="saveRefToLibrary(ref)">+lib</button>
+            <button class="chip-x" @click.stop="removeRef(ref)">&times;</button>
+          </div>
+        </template>
+      </div>
+
+      <!-- System instruction: toggle on/off, override per generation -->
+      <div class="sys-row">
+        <label class="sys-toggle">
+          <input type="checkbox" x-model="composer.useSystem" />
+          System instruction
+        </label>
+        <textarea x-show="composer.useSystem" class="sys-text" rows="2"
+                  x-model="composer.systemInstruction"
+                  placeholder="Applies to this generation (prefilled from the global default; edit for a custom one)"></textarea>
+      </div>
+
+      <div class="composer-input">
+        <!-- @mention autocomplete -->
+        <div class="mention-pop" x-show="mention.open" x-transition>
+          <template x-for="s in mention.matches" :key="s.key">
+            <div class="mention-item" @mousedown.prevent="applyMention(s)">
+              <img :src="s.url" alt="" />
+              <span x-text="'@' + s.label"></span>
+              <small x-show="s.inLibrary">library</small>
+            </div>
+          </template>
+          <div class="mention-item empty" x-show="!mention.matches.length">no matches</div>
+        </div>
+
+        <textarea x-ref="prompt" x-model="composer.prompt"
+                  @input="onPromptInput($event)"
+                  @keydown.escape="mention.open = false"
+                  placeholder="Describe the image… use @Name to reference an image"></textarea>
+      </div>
+
+      <div class="composer-bar">
+        <input type="file" x-ref="file" accept="image/*" multiple hidden
+               @change="attachFiles($event)" />
+        <button class="ghost-btn" @click="$refs.file.click()">📎 Upload</button>
+        <button class="ghost-btn" @click="openLibrary(true)">🖼 From library</button>
+
+        <div class="spacer"></div>
+
+        <label>Model
+          <select x-model="composer.model">
+            <template x-for="m in settings.models" :key="m">
+              <option :value="m" x-text="m"></option>
+            </template>
+          </select>
+        </label>
+        <label>Resolution
+          <select x-model="composer.resolution">
+            <template x-for="r in settings.resolutions" :key="r">
+              <option :value="r" x-text="r"></option>
+            </template>
+          </select>
+        </label>
+        <label>Images
+          <select x-model.number="composer.num_images">
+            <template x-for="n in [1,2,3,4]" :key="n">
+              <option :value="n" x-text="n"></option>
+            </template>
+          </select>
+        </label>
+
+        <button class="primary-btn" :disabled="!composer.prompt.trim() || submitting"
+                @click="submit()">
+          <span x-show="!submitting">Generate</span>
+          <span x-show="submitting">Submitting…</span>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===================== Library modal ================================= -->
+  <div class="modal-backdrop" x-show="showLibrary" x-transition @click.self="showLibrary=false">
+    <div class="modal">
+      <header>
+        <h2>Image library</h2>
+        <button class="icon-btn" @click="showLibrary=false">&times;</button>
+      </header>
+      <p class="hint" x-show="libraryPicking">Click an image to add it as a reference.</p>
+      <div class="lib-grid">
+        <template x-for="img in library" :key="img.id">
+          <figure class="lib-item">
+            <img :src="img.url" alt=""
+                 @click="libraryPicking ? pickFromLibrary(img) : openLightbox(img.url)" />
+            <figcaption x-text="'@' + (img.library_name || '')"></figcaption>
+            <div class="lib-actions">
+              <button class="mini" @click="saveImage(img)">Save</button>
+              <button class="mini" @click="removeFromLibrary(img)">Remove</button>
+              <button class="mini danger" @click="deleteImage(img)">Delete</button>
+            </div>
+          </figure>
+        </template>
+        <div class="empty" x-show="!library.length">
+          Library is empty. Upload an image in the composer, then use “+ Library”.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== Settings modal =============================== -->
+  <div class="modal-backdrop" x-show="showSettings" x-transition @click.self="showSettings=false">
+    <div class="modal">
+      <header>
+        <h2>Settings</h2>
+        <button class="icon-btn" @click="showSettings=false">&times;</button>
+      </header>
+      <label class="field">Gemini API key
+        <input type="password" x-model="settingsDraft.gemini_api_key"
+               placeholder="paste key" />
+      </label>
+      <label class="field">Default prompt
+        <textarea x-model="settingsDraft.default_prompt" rows="3"></textarea>
+      </label>
+      <label class="field">Default system instruction
+        <textarea x-model="settingsDraft.system_instruction" rows="3"
+                  placeholder="e.g. Always photorealistic; never add text overlays"></textarea>
+      </label>
+      <label class="field">Models (comma-separated)
+        <input type="text" x-model="settingsDraft.modelsText" />
+      </label>
+      <label class="field">Default model
+        <select x-model="settingsDraft.default_model">
+          <template x-for="m in settingsDraft.modelsText.split(',').map(s=>s.trim()).filter(Boolean)" :key="m">
+            <option :value="m" x-text="m"></option>
+          </template>
+        </select>
+      </label>
+      <label class="field">Theme
+        <select x-model="settingsDraft.theme">
+          <option value="dark">Dark</option>
+          <option value="light">Light</option>
+        </select>
+      </label>
+      <label class="field checkbox">
+        <input type="checkbox" x-model="settingsDraft.useBatch" />
+        Use the async Batch API (uncheck to call the model synchronously)
+      </label>
+
+      <!-- ---- Vertex AI (Google Cloud) ---- -->
+      <hr style="border:none;border-top:1px solid var(--border);margin:6px 0 14px" />
+      <label class="field checkbox">
+        <input type="checkbox" x-model="settingsDraft.useVertex" />
+        Use Vertex AI (Google Cloud) instead of the Gemini API key
+      </label>
+      <p class="hint" x-show="settingsDraft.useVertex">
+        Auth uses Google Cloud credentials (run
+        <code>gcloud auth application-default login</code>), not the API key
+        above. If you use the Batch API with Vertex, leave it off unless you've
+        set up a GCS bucket — inline batch is Developer-API only.
+      </p>
+      <template x-if="settingsDraft.useVertex">
+        <div>
+          <label class="field">Google Cloud project ID
+            <input type="text" x-model="settingsDraft.gcp_project"
+                   placeholder="my-gcp-project" />
+          </label>
+          <label class="field">Location
+            <input type="text" x-model="settingsDraft.gcp_location"
+                   placeholder="global" />
+          </label>
+        </div>
+      </template>
+
+      <div class="modal-actions">
+        <button class="ghost-btn" @click="showSettings=false">Cancel</button>
+        <button class="primary-btn" @click="saveSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full-size image overlay. Click anywhere to close. -->
+  <div class="lightbox" x-show="lightbox" x-transition @click="lightbox = null">
+    <img :src="lightbox" alt="full size" />
+  </div>
+
+  <!-- Tiny toast for errors/notices -->
+  <div class="toast" x-show="toast" x-transition x-text="toast"></div>
+
+</body>
+</html>

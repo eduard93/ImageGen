@@ -1,0 +1,253 @@
+/* Simple dark chatbot-style layout. All colors are CSS variables at the top,
+   so you can restyle the app by editing just this block. */
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --panel-2: #1e222b;
+  --border: #2a2f3a;
+  --text: #e6e8ec;
+  --muted: #9aa2b1;
+  --accent: #4f8cff;
+  --accent-2: #3a6fd8;
+  --danger: #e5534b;
+  --ok: #3fb950;
+  --radius: 12px;
+}
+
+/* Light theme: activated by data-theme="light" on <html>, set from settings. */
+:root[data-theme="light"] {
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef1f5;
+  --border: #d7dbe2;
+  --text: #1a1d23;
+  --muted: #5f6672;
+  --accent: #2f6fe0;
+  --accent-2: #245bc0;
+  --danger: #d33a30;
+  --ok: #2ea043;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ---------------- Sidebar ---------------- */
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.new-btn {
+  margin: 12px;
+  padding: 10px;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  font-weight: 600;
+  cursor: pointer;
+}
+.new-btn:hover { background: var(--accent-2); }
+.gen-list { overflow-y: auto; padding: 0 8px 12px; }
+.gen-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  position: relative;
+}
+.gen-item:hover { background: var(--panel-2); }
+.gen-item.active { background: var(--panel-2); outline: 1px solid var(--accent); }
+.gen-thumb {
+  width: 40px; height: 40px; flex: 0 0 40px;
+  border-radius: 8px; overflow: hidden; background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.gen-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.gen-meta { min-width: 0; flex: 1; }
+.gen-prompt {
+  font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.gen-status { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+.status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+.status-dot.running, .status-dot.pending { background: var(--accent); animation: pulse 1.2s infinite; }
+.status-dot.failed { background: var(--danger); }
+.status-dot.succeeded { background: var(--ok); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+/* ---------------- Main column ---------------- */
+.main { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+.topbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 18px; border-bottom: 1px solid var(--border);
+}
+.topbar h1 { font-size: 18px; margin: 0; }
+.spacer { flex: 1; }
+
+.chat { flex: 1; overflow-y: auto; padding: 20px; }
+.empty { color: var(--muted); padding: 12px; text-align: center; }
+.empty.big { margin-top: 20vh; font-size: 16px; }
+
+.bubble {
+  max-width: 760px; margin: 0 auto 16px; padding: 14px 16px;
+  border-radius: var(--radius); border: 1px solid var(--border);
+}
+.bubble.user { background: var(--panel-2); }
+.bubble.assistant { background: var(--panel); }
+.bubble-text { white-space: pre-wrap; }
+.bubble-meta { margin-top: 8px; font-size: 12px; color: var(--muted); }
+.ref-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.ref-thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; cursor: zoom-in; }
+/* Give the assistant (results) bubble more room so images render large. */
+.bubble.assistant { max-width: 900px; }
+
+.working { display: flex; align-items: center; gap: 10px; color: var(--muted); }
+.spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--border); border-top-color: var(--accent);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.error-box { color: var(--danger); white-space: pre-wrap; }
+
+.img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; }
+.result { margin: 0; position: relative; }
+.result img { width: 100%; border-radius: 10px; display: block; cursor: zoom-in; }
+.save-btn {
+  position: absolute; bottom: 8px; right: 8px;
+  background: rgba(0,0,0,.65); color: #fff; text-decoration: none;
+  padding: 5px 9px; border-radius: 8px; font-size: 12px; border: none; cursor: pointer;
+}
+.save-btn.secondary { right: auto; left: 8px; }
+.edit-row { max-width: 760px; margin: 0 auto 16px; }
+
+/* ---------------- Composer ---------------- */
+.composer { position: relative; border-top: 1px solid var(--border); padding: 12px 18px; background: var(--panel); }
+.composer.dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.drop-overlay {
+  position: absolute; inset: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(79,140,255,.12); color: var(--accent);
+  font-weight: 600; border-radius: var(--radius); pointer-events: none;
+}
+.ref-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.chip {
+  display: flex; align-items: center; gap: 6px; background: var(--panel-2);
+  border: 1px solid var(--border); border-radius: 999px; padding: 3px 8px 3px 3px;
+  font-size: 12px; cursor: pointer;
+}
+.chip img { width: 22px; height: 22px; border-radius: 50%; object-fit: cover; cursor: zoom-in; }
+.chip-lib { background: none; border: none; color: var(--accent); cursor: pointer; font-size: 11px; padding: 0 2px; }
+.chip-x { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px; }
+
+.sys-row { margin-bottom: 8px; }
+.sys-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); cursor: pointer; }
+.sys-text {
+  width: 100%; margin-top: 6px; resize: vertical; padding: 8px 10px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; font: inherit; font-size: 13px;
+}
+
+.composer-input { position: relative; }
+.composer-input textarea {
+  width: 100%; min-height: 64px; resize: vertical; padding: 10px 12px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 10px; font: inherit;
+}
+.mention-pop {
+  position: absolute; bottom: 100%; left: 0; margin-bottom: 6px;
+  background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+  min-width: 220px; max-height: 240px; overflow-y: auto; z-index: 20; padding: 4px;
+}
+.mention-item {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 8px; cursor: pointer;
+}
+.mention-item:hover { background: var(--panel); }
+.mention-item img { width: 24px; height: 24px; border-radius: 6px; object-fit: cover; }
+.mention-item small { margin-left: auto; color: var(--muted); }
+.mention-item.empty { color: var(--muted); cursor: default; }
+
+.composer-bar { display: flex; align-items: center; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+.composer-bar label { font-size: 12px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
+.composer-bar select {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 5px; font: inherit;
+}
+
+/* ---------------- Buttons ---------------- */
+.ghost-btn, .primary-btn {
+  border-radius: 10px; padding: 8px 12px; font: inherit; cursor: pointer; border: 1px solid var(--border);
+}
+.ghost-btn { background: var(--panel-2); color: var(--text); }
+.ghost-btn:hover { background: var(--border); }
+.primary-btn { background: var(--accent); color: #fff; border: none; font-weight: 600; }
+.primary-btn:hover { background: var(--accent-2); }
+.primary-btn:disabled { opacity: .5; cursor: not-allowed; }
+.icon-btn { background: none; border: none; color: var(--muted); font-size: 16px; cursor: pointer; line-height: 1; padding: 2px 4px; border-radius: 6px; }
+.icon-btn:hover { color: var(--text); background: var(--border); }
+.gen-actions {
+  position: absolute; right: 4px; top: 4px; display: flex; gap: 2px;
+  opacity: 0; background: var(--panel-2); border-radius: 8px;
+}
+.gen-item:hover .gen-actions { opacity: 1; }
+
+/* ---------------- Modals ---------------- */
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,.55);
+  display: flex; align-items: center; justify-content: center; z-index: 50;
+}
+.modal {
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+  width: min(720px, 92vw); max-height: 88vh; overflow-y: auto; padding: 18px;
+}
+.modal header { display: flex; align-items: center; margin-bottom: 12px; }
+.modal header h2 { margin: 0; font-size: 18px; flex: 1; }
+.hint { color: var(--muted); font-size: 13px; margin-top: 0; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 14px; }
+.field.checkbox { flex-direction: row; align-items: center; gap: 8px; }
+.field input[type=text], .field input[type=password], .field textarea, .field select {
+  background: var(--bg); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 8px; font: inherit;
+}
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+.lib-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.lib-item { margin: 0; background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 8px; }
+.lib-item img { width: 100%; height: 120px; object-fit: cover; border-radius: 8px; cursor: pointer; }
+.lib-item figcaption { font-size: 13px; margin: 6px 0; color: var(--accent); }
+.lib-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.mini {
+  font-size: 11px; padding: 3px 7px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--panel); color: var(--text); cursor: pointer; text-decoration: none;
+}
+.mini.danger { color: var(--danger); }
+
+/* ---------------- Lightbox (full-size image overlay) ---------------- */
+.lightbox {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0, 0, 0, .85);
+  display: flex; align-items: center; justify-content: center;
+  padding: 24px; cursor: zoom-out;
+}
+.lightbox img {
+  max-width: 92vw; max-height: 92vh; border-radius: 8px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, .6);
+}
+
+/* ---------------- Toast ---------------- */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+  padding: 10px 16px; border-radius: 10px; z-index: 100;
+}
